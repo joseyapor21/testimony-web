@@ -1,5 +1,5 @@
 const TOKEN_KEY = 'auth_token';
-const BASE_URL = 'http://localhost:3001';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://192.168.8.254:3001';
 
 export const AuthService = {
   getAuthToken(): string | null {

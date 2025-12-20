@@ -1,7 +1,7 @@
 import { AuthService } from './auth';
 import { CallRecord, CallStatusInfo, Note, CallHistory } from '../types';
 
-const BASE_URL = 'http://localhost:3001';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://192.168.8.254:3001';
 
 export const ApiService = {
   async getRegistrations(): Promise<CallRecord[]> {
