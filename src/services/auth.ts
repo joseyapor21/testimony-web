@@ -1,5 +1,5 @@
 const TOKEN_KEY = 'auth_token';
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://192.168.8.254:3001';
+const getBaseUrl = () => (window as any).APP_CONFIG?.API_URL || 'http://localhost:3001';
 
 export const AuthService = {
   getAuthToken(): string | null {
@@ -29,7 +29,7 @@ export const AuthService = {
 
   async login(email: string, password: string): Promise<boolean> {
     try {
-      const response = await fetch(`${BASE_URL}/api/login/v4`, {
+      const response = await fetch(`${getBaseUrl()}/api/login/v4`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

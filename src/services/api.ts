@@ -1,12 +1,12 @@
 import { AuthService } from './auth';
 import { CallRecord, CallStatusInfo, Note, CallHistory } from '../types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://192.168.8.254:3001';
+const getBaseUrl = () => (window as any).APP_CONFIG?.API_URL || 'http://localhost:3001';
 
 export const ApiService = {
   async getRegistrations(): Promise<CallRecord[]> {
     const headers = AuthService.getHeaders();
-    const response = await fetch(`${BASE_URL}/api/v3/testimonies/visitors`, {
+    const response = await fetch(`${getBaseUrl()}/api/v3/testimonies/visitors`, {
       method: 'GET',
       headers,
     });
@@ -22,7 +22,7 @@ export const ApiService = {
   async getCallHistories(recordId: string): Promise<CallHistory[]> {
     const headers = AuthService.getHeaders();
     const response = await fetch(
-      `${BASE_URL}/api/v3/testimonies/call-histories/${recordId}`,
+      `${getBaseUrl()}/api/v3/testimonies/call-histories/${recordId}`,
       {
         method: 'GET',
         headers,
@@ -39,7 +39,7 @@ export const ApiService = {
   async addCallHistory(recordId: string, callHistory: CallHistory): Promise<void> {
     const headers = AuthService.getHeaders();
     const response = await fetch(
-      `${BASE_URL}/api/v3/testimonies/call-histories/${recordId}`,
+      `${getBaseUrl()}/api/v3/testimonies/call-histories/${recordId}`,
       {
         method: 'POST',
         headers,
@@ -55,7 +55,7 @@ export const ApiService = {
   async updateCallStatus(recordId: string, callStatus: CallStatusInfo): Promise<void> {
     const headers = AuthService.getHeaders();
     const response = await fetch(
-      `${BASE_URL}/api/v3/testimonies/call-status/${recordId}`,
+      `${getBaseUrl()}/api/v3/testimonies/call-status/${recordId}`,
       {
         method: 'POST',
         headers,
@@ -71,7 +71,7 @@ export const ApiService = {
   async deleteCallStatus(recordId: string, callStatusId: string): Promise<void> {
     const headers = AuthService.getHeaders();
     const response = await fetch(
-      `${BASE_URL}/api/v3/testimonies/call-status/${recordId}/${callStatusId}`,
+      `${getBaseUrl()}/api/v3/testimonies/call-status/${recordId}/${callStatusId}`,
       {
         method: 'DELETE',
         headers,
@@ -86,7 +86,7 @@ export const ApiService = {
   async getNotes(visitorId: string): Promise<Note[]> {
     const headers = AuthService.getHeaders();
     const response = await fetch(
-      `${BASE_URL}/api/v3/testimonies/notes/${visitorId}`,
+      `${getBaseUrl()}/api/v3/testimonies/notes/${visitorId}`,
       {
         method: 'GET',
         headers,
@@ -103,7 +103,7 @@ export const ApiService = {
   async addNote(visitorId: string, note: Omit<Note, 'id'>): Promise<Note> {
     const headers = AuthService.getHeaders();
     const response = await fetch(
-      `${BASE_URL}/api/v3/testimonies/notes/${visitorId}`,
+      `${getBaseUrl()}/api/v3/testimonies/notes/${visitorId}`,
       {
         method: 'POST',
         headers,
