@@ -1,5 +1,8 @@
 import jwt from 'jsonwebtoken';
-import { User } from '../models/index.js';
+import { User, Department } from '../models/index.js';
+
+// Department name this app is assigned to
+const DEPARTMENT_NAME = 'Testimony Department';
 
 export async function login(req, res) {
   try {
@@ -24,8 +27,27 @@ export async function login(req, res) {
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
+    // Check if user is in the Testimony Department
+    const department = await Department.findOne({ name: DEPARTMENT_NAME });
+
+    if (!department) {
+      console.error('Department not found:', DEPARTMENT_NAME);
+      return res.status(403).json({ error: 'Department not configured.' });
+    }
+
+    const userId = user._id.toString();
+    const isAdmin = department.adminIds.includes(userId);
+    const isMember = department.memberIds.includes(userId);
+
+    if (!isAdmin && !isMember) {
+      console.log('User not in department:', userId);
+      return res.status(403).json({ error: 'You are not authorized to access this department.' });
+    }
+
+    console.log('User department access:', { isAdmin, isMember });
+
     const token = jwt.sign(
-      { userId: user._id, email: user.email, isAdmin: user.isAdmin },
+      { userId: user._id, email: user.email, isAdmin: isAdmin },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -36,7 +58,8 @@ export async function login(req, res) {
         id: user._id,
         email: user.email,
         name: user.name,
-        isAdmin: user.isAdmin || false,
+        isAdmin: isAdmin,
+        isMember: isMember,
       },
     });
   } catch (error) {

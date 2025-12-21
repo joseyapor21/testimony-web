@@ -68,7 +68,7 @@ export function LoginPage() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">Testimony Tracker</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Testimony Department</h1>
           <p className="text-gray-500 mt-2">Sign in to continue</p>
         </div>
 

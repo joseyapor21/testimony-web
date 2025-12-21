@@ -223,7 +223,7 @@ export function HomePage() {
       <header className="bg-primary-600 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-white text-xl font-bold">Testimony Tracker</h1>
+            <h1 className="text-white text-xl font-bold">Testimony Department</h1>
             <button
               onClick={handleLogout}
               className="text-white hover:text-white/80 transition-colors"
