@@ -1,5 +1,5 @@
 const TOKEN_KEY = 'auth_token';
-const getBaseUrl = () => (window as any).APP_CONFIG?.API_URL || 'http://localhost:3001';
+const getBaseUrl = () => (window as any).APP_CONFIG?.API_URL || '';
 
 export const AuthService = {
   getAuthToken(): string | null {

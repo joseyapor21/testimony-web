@@ -1,7 +1,7 @@
 import { AuthService } from './auth';
 import { CallRecord, CallStatusInfo, Note, CallHistory } from '../types';
 
-const getBaseUrl = () => (window as any).APP_CONFIG?.API_URL || 'http://localhost:3001';
+const getBaseUrl = () => (window as any).APP_CONFIG?.API_URL || '';
 
 export const ApiService = {
   async getRegistrations(): Promise<CallRecord[]> {

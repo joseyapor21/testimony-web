@@ -1,34 +1,40 @@
-# Build stage
-FROM node:20-alpine AS build
+# Build frontend
+FROM node:20-alpine AS frontend-build
 
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm ci
-
-# Copy source code
 COPY . .
-
-# Build the app
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM node:20-alpine
 
-# Copy built files to nginx
-COPY --from=build /app/dist /usr/share/nginx/html
+# Install nginx and supervisor
+RUN apk add --no-cache nginx supervisor
 
-# Copy nginx config for SPA routing
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Setup nginx
+RUN mkdir -p /run/nginx
+COPY nginx.conf /etc/nginx/http.d/default.conf
 
-# Copy entrypoint script
+# Copy frontend build
+COPY --from=frontend-build /app/dist /usr/share/nginx/html
+COPY --from=frontend-build /app/public/config.js /usr/share/nginx/html/config.js
+
+# Setup API
+WORKDIR /app/api
+COPY api/package*.json ./
+RUN npm ci --only=production
+COPY api/src ./src
+
+# Create supervisor config
+RUN mkdir -p /etc/supervisor.d
+COPY supervisord.conf /etc/supervisor.d/app.ini
+
+# Copy entrypoint
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Expose port 80
 EXPOSE 80
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
