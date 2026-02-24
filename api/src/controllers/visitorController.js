@@ -8,7 +8,7 @@ export async function getVisitors(req, res) {
     const skip = (page - 1) * limit;
 
     const [visitors, total] = await Promise.all([
-      Visitor.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Visitor.find().sort({ created_at: -1 }).skip(skip).limit(limit),
       Visitor.countDocuments()
     ]);
 
