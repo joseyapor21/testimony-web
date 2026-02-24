@@ -1,22 +1,28 @@
 import { AuthService } from './auth';
-import { CallRecord, CallStatusInfo, Note, CallHistory } from '../types';
+import { CallRecord, CallStatusInfo, Note, CallHistory, PaginatedResponse } from '../types';
 
 const getBaseUrl = () => (window as any).APP_CONFIG?.API_URL || '';
 
 export const ApiService = {
-  async getRegistrations(): Promise<CallRecord[]> {
+  async getRegistrations(page = 1, limit = 20): Promise<PaginatedResponse<CallRecord>> {
     const headers = AuthService.getHeaders();
-    const response = await fetch(`${getBaseUrl()}/api/v3/testimonies/visitors`, {
-      method: 'GET',
-      headers,
-    });
+    const response = await fetch(
+      `${getBaseUrl()}/api/v3/testimonies/visitors?page=${page}&limit=${limit}`,
+      {
+        method: 'GET',
+        headers,
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to fetch registrations: ${response.status}`);
     }
 
-    const data = await response.json();
-    return data.map((item: unknown) => parseCallRecord(item));
+    const result = await response.json();
+    return {
+      data: result.data.map((item: unknown) => parseCallRecord(item)),
+      pagination: result.pagination,
+    };
   },
 
   async getCallHistories(recordId: string): Promise<CallHistory[]> {

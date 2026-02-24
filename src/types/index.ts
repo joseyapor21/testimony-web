@@ -95,3 +95,16 @@ export interface FilterOptions {
 export interface GroupedRecords {
   [sundayDate: string]: CallRecord[];
 }
+
+export interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: PaginationInfo;
+}

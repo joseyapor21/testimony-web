@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiService } from '../services/api';
 import { AuthService } from '../services/auth';
-import { CallRecord, FilterOptions } from '../types';
+import { CallRecord, FilterOptions, PaginationInfo } from '../types';
 import { DateHelper } from '../utils/dateUtils';
 import { RecordCard, SearchBar } from '../components';
 import { RecordDetailsModal } from './RecordDetailsModal';
@@ -14,6 +14,8 @@ interface GroupedSection {
   records: CallRecord[];
 }
 
+const RECORDS_PER_PAGE = 20;
+
 export function HomePage() {
   const navigate = useNavigate();
   const [records, setRecords] = useState<CallRecord[]>([]);
@@ -23,12 +25,16 @@ export function HomePage() {
   const [filters, setFilters] = useState<FilterOptions | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<CallRecord | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
 
-  const loadRecords = useCallback(async () => {
+  const loadRecords = useCallback(async (page = 1) => {
     try {
       setError(null);
-      const data = await ApiService.getRegistrations();
-      setRecords(data);
+      const result = await ApiService.getRegistrations(page, RECORDS_PER_PAGE);
+      setRecords(result.data);
+      setPagination(result.pagination);
+      setCurrentPage(page);
     } catch (err) {
       setError('Failed to load records. Please try again.');
       console.error('Error loading records:', err);
@@ -185,7 +191,15 @@ export function HomePage() {
   }, [filters]);
 
   const handleRecordUpdate = () => {
-    loadRecords();
+    loadRecords(currentPage);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && (!pagination || newPage <= pagination.totalPages)) {
+      setIsLoading(true);
+      loadRecords(newPage).finally(() => setIsLoading(false));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   if (isLoading) {
@@ -271,7 +285,7 @@ export function HomePage() {
           <div className="bg-red-100 px-4 py-3 rounded-lg mb-4">
             <p className="text-red-700">{error}</p>
             <button
-              onClick={loadRecords}
+              onClick={() => loadRecords(currentPage)}
               className="text-red-600 font-semibold mt-2 hover:underline"
             >
               Tap to retry
@@ -303,26 +317,88 @@ export function HomePage() {
             </p>
           </div>
         ) : (
-          groupedSections.map((section) => (
-            <div key={section.sundayKey} className="mb-6">
-              {/* Section Header */}
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-gray-600 font-semibold">{section.sundayRange}</h2>
-                <span className="bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 text-xs font-medium">
-                  {section.records.length} visitor{section.records.length !== 1 ? 's' : ''}
-                </span>
-              </div>
+          <>
+            {groupedSections.map((section) => (
+              <div key={section.sundayKey} className="mb-6">
+                {/* Section Header */}
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-gray-600 font-semibold">{section.sundayRange}</h2>
+                  <span className="bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 text-xs font-medium">
+                    {section.records.length} visitor{section.records.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
 
-              {/* Record Cards */}
-              {section.records.map((record) => (
-                <RecordCard
-                  key={record.id}
-                  record={record}
-                  onClick={() => setSelectedRecord(record)}
-                />
-              ))}
-            </div>
-          ))
+                {/* Record Cards */}
+                {section.records.map((record) => (
+                  <RecordCard
+                    key={record.id}
+                    record={record}
+                    onClick={() => setSelectedRecord(record)}
+                  />
+                ))}
+              </div>
+            ))}
+
+            {/* Pagination */}
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 py-6">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                    .filter((page) => {
+                      if (pagination.totalPages <= 7) return true;
+                      if (page === 1 || page === pagination.totalPages) return true;
+                      if (Math.abs(page - currentPage) <= 1) return true;
+                      return false;
+                    })
+                    .map((page, idx, arr) => (
+                      <span key={page} className="flex items-center">
+                        {idx > 0 && arr[idx - 1] !== page - 1 && (
+                          <span className="px-2 text-gray-400">...</span>
+                        )}
+                        <button
+                          onClick={() => handlePageChange(page)}
+                          className={`w-10 h-10 rounded-lg font-medium transition-colors ${
+                            currentPage === page
+                              ? 'bg-primary-600 text-white'
+                              : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      </span>
+                    ))}
+                </div>
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === pagination.totalPages}
+                  className="px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
+            {/* Page Info */}
+            {pagination && (
+              <div className="text-center text-sm text-gray-500 pb-4">
+                Showing {(currentPage - 1) * RECORDS_PER_PAGE + 1} -{' '}
+                {Math.min(currentPage * RECORDS_PER_PAGE, pagination.total)} of {pagination.total} records
+              </div>
+            )}
+          </>
         )}
       </main>
 

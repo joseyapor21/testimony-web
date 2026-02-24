@@ -1,10 +1,27 @@
 import { Visitor } from '../models/index.js';
 
-// Get all visitors
+// Get all visitors with pagination
 export async function getVisitors(req, res) {
   try {
-    const visitors = await Visitor.find().sort({ createdAt: -1 });
-    res.json(visitors);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const [visitors, total] = await Promise.all([
+      Visitor.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Visitor.countDocuments()
+    ]);
+
+    res.json({
+      data: visitors,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    });
   } catch (error) {
     console.error('Get visitors error:', error);
     res.status(500).json({ error: 'Server error.' });
