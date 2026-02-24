@@ -110,6 +110,9 @@ const visitorSchema = new mongoose.Schema({
   _id: false, // Don't auto-generate _id
 });
 
+// Add index for faster sorting and pagination
+visitorSchema.index({ created_at: -1 });
+
 // Update updated_at on save
 visitorSchema.pre('save', function(next) {
   this.updated_at = new Date();

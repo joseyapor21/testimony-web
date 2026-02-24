@@ -1,5 +1,27 @@
 import { Visitor } from '../models/index.js';
 
+// Transform raw document to frontend format
+function transformVisitor(doc) {
+  return {
+    id: doc._id,
+    _id: doc._id,
+    photo: doc.photo || '',
+    personalInfo: doc.personalInfo || {},
+    appointmentInfo: doc.appointment ? {
+      departureDate: doc.appointment.departureDate || '',
+      departureTime: doc.appointment.departureTime || '',
+      interviewDate: doc.appointment.interviewDate || '',
+      prayerDate: doc.appointment.prayerDate || '',
+    } : {},
+    medicalInfo: doc.medicalInfo || {},
+    interview: doc.interview || {},
+    status: doc.status || [],
+    statusNotes: doc.statusNotes || {},
+    metadata: doc.metadata || {},
+    callStatuses: doc.callStatusInfo || [],
+  };
+}
+
 // Get all visitors with pagination
 export async function getVisitors(req, res) {
   try {
@@ -8,12 +30,16 @@ export async function getVisitors(req, res) {
     const skip = (page - 1) * limit;
 
     const [visitors, total] = await Promise.all([
-      Visitor.find().sort({ created_at: -1 }).skip(skip).limit(limit),
-      Visitor.countDocuments()
+      Visitor.find()
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Visitor.estimatedDocumentCount()
     ]);
 
     res.json({
-      data: visitors,
+      data: visitors.map(transformVisitor),
       pagination: {
         page,
         limit,
