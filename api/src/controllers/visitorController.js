@@ -22,6 +22,61 @@ function transformVisitor(doc) {
   };
 }
 
+// Build filter query from request params
+function buildFilterQuery(query) {
+  const filter = {};
+
+  // Search query (name, phone)
+  if (query.search) {
+    const searchRegex = new RegExp(query.search, 'i');
+    filter.$or = [
+      { 'personalInfo.firstName': searchRegex },
+      { 'personalInfo.lastName': searchRegex },
+      { 'personalInfo.phone': searchRegex },
+    ];
+  }
+
+  // Evangelist name filter
+  if (query.evangelistName) {
+    filter['callStatusInfo.evangelistName'] = new RegExp(query.evangelistName, 'i');
+  }
+
+  // Call status filter
+  if (query.callStatus) {
+    filter['callStatusInfo.callStatus'] = new RegExp(`^${query.callStatus}$`, 'i');
+  }
+
+  // Follow up only
+  if (query.followUpOnly === 'true') {
+    filter['callStatusInfo.followUp'] = true;
+  }
+
+  // Has testimony only
+  if (query.hasTestimonyOnly === 'true') {
+    filter['callStatusInfo.hasTestimony'] = true;
+  }
+
+  // Date range filters
+  if (query.dateFrom || query.dateTo) {
+    const dateField = {
+      prayer: 'appointment.prayerDate',
+      interview: 'appointment.interviewDate',
+      call: 'callStatusInfo.dateOfCall',
+      testimony: 'callStatusInfo.dateOfTestimony',
+    }[query.dateType] || 'appointment.prayerDate';
+
+    if (query.dateFrom && query.dateTo) {
+      filter[dateField] = { $gte: query.dateFrom, $lte: query.dateTo };
+    } else if (query.dateFrom) {
+      filter[dateField] = { $gte: query.dateFrom };
+    } else if (query.dateTo) {
+      filter[dateField] = { $lte: query.dateTo };
+    }
+  }
+
+  return filter;
+}
+
 // Get all visitors with pagination
 export async function getVisitors(req, res) {
   try {
@@ -29,13 +84,16 @@ export async function getVisitors(req, res) {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
 
+    const filter = buildFilterQuery(req.query);
+    const hasFilters = Object.keys(filter).length > 0;
+
     const [visitors, total] = await Promise.all([
-      Visitor.find()
+      Visitor.find(filter)
         .sort({ created_at: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Visitor.estimatedDocumentCount()
+      hasFilters ? Visitor.countDocuments(filter) : Visitor.estimatedDocumentCount()
     ]);
 
     res.json({

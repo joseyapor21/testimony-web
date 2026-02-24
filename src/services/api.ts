@@ -3,11 +3,42 @@ import { CallRecord, CallStatusInfo, Note, CallHistory, PaginatedResponse } from
 
 const getBaseUrl = () => (window as any).APP_CONFIG?.API_URL || '';
 
+export interface ApiFilterOptions {
+  search?: string;
+  evangelistName?: string;
+  callStatus?: string;
+  followUpOnly?: boolean;
+  hasTestimonyOnly?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+  dateType?: string;
+}
+
 export const ApiService = {
-  async getRegistrations(page = 1, limit = 20): Promise<PaginatedResponse<CallRecord>> {
+  async getRegistrations(
+    page = 1,
+    limit = 20,
+    filters?: ApiFilterOptions
+  ): Promise<PaginatedResponse<CallRecord>> {
     const headers = AuthService.getHeaders();
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+
+    if (filters) {
+      if (filters.search) params.append('search', filters.search);
+      if (filters.evangelistName) params.append('evangelistName', filters.evangelistName);
+      if (filters.callStatus) params.append('callStatus', filters.callStatus);
+      if (filters.followUpOnly) params.append('followUpOnly', 'true');
+      if (filters.hasTestimonyOnly) params.append('hasTestimonyOnly', 'true');
+      if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+      if (filters.dateTo) params.append('dateTo', filters.dateTo);
+      if (filters.dateType) params.append('dateType', filters.dateType);
+    }
+
     const response = await fetch(
-      `${getBaseUrl()}/api/v3/testimonies/visitors?page=${page}&limit=${limit}`,
+      `${getBaseUrl()}/api/v3/testimonies/visitors?${params.toString()}`,
       {
         method: 'GET',
         headers,

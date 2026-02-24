@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiService } from '../services/api';
+import { ApiService, ApiFilterOptions } from '../services/api';
 import { AuthService } from '../services/auth';
 import { CallRecord, FilterOptions, PaginationInfo } from '../types';
 import { DateHelper } from '../utils/dateUtils';
@@ -27,11 +27,32 @@ export function HomePage() {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const loadRecords = useCallback(async (page = 1) => {
+  const buildApiFilters = useCallback((): ApiFilterOptions | undefined => {
+    const apiFilters: ApiFilterOptions = {};
+
+    if (searchQuery.trim()) {
+      apiFilters.search = searchQuery.trim();
+    }
+
+    if (filters) {
+      if (filters.evangelistName) apiFilters.evangelistName = filters.evangelistName;
+      if (filters.callStatus) apiFilters.callStatus = filters.callStatus;
+      if (filters.followUpOnly) apiFilters.followUpOnly = true;
+      if (filters.hasTestimonyOnly) apiFilters.hasTestimonyOnly = true;
+      if (filters.dateFrom) apiFilters.dateFrom = filters.dateFrom.toISOString().split('T')[0];
+      if (filters.dateTo) apiFilters.dateTo = filters.dateTo.toISOString().split('T')[0];
+      if (filters.dateType) apiFilters.dateType = filters.dateType;
+    }
+
+    return Object.keys(apiFilters).length > 0 ? apiFilters : undefined;
+  }, [searchQuery, filters]);
+
+  const loadRecords = useCallback(async (page = 1, apiFilters?: ApiFilterOptions) => {
     try {
       setError(null);
-      const result = await ApiService.getRegistrations(page, RECORDS_PER_PAGE);
+      const result = await ApiService.getRegistrations(page, RECORDS_PER_PAGE, apiFilters);
       setRecords(result.data);
       setPagination(result.pagination);
       setCurrentPage(page);
@@ -41,14 +62,42 @@ export function HomePage() {
     }
   }, []);
 
+  // Initial load
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
-      await loadRecords();
+      await loadRecords(1, buildApiFilters());
       setIsLoading(false);
     };
     init();
-  }, [loadRecords]);
+  }, []);
+
+  // Reload when filters change
+  useEffect(() => {
+    setIsLoading(true);
+    setCurrentPage(1);
+    loadRecords(1, buildApiFilters()).finally(() => setIsLoading(false));
+  }, [filters]);
+
+  // Debounced search
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      setIsLoading(true);
+      setCurrentPage(1);
+      const apiFilters = buildApiFilters();
+      if (value.trim()) {
+        loadRecords(1, { ...apiFilters, search: value.trim() }).finally(() => setIsLoading(false));
+      } else {
+        loadRecords(1, apiFilters).finally(() => setIsLoading(false));
+      }
+    }, 300);
+  };
 
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to logout?')) {
@@ -57,100 +106,10 @@ export function HomePage() {
     }
   };
 
-  const filteredRecords = useMemo(() => {
-    let result = [...records];
-
-    // Apply search
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter((record) => {
-        const { personalInfo, status, callStatuses } = record;
-        const fullName = `${personalInfo.firstName} ${personalInfo.lastName}`.toLowerCase();
-        const phone = personalInfo.phone.toLowerCase();
-
-        if (fullName.includes(query) || phone.includes(query)) return true;
-        if (status.some((s) => s.toLowerCase().includes(query))) return true;
-        if (
-          callStatuses.some(
-            (cs) =>
-              cs.evangelistName.toLowerCase().includes(query) ||
-              cs.callStatus.toLowerCase().includes(query) ||
-              cs.notes.toLowerCase().includes(query)
-          )
-        )
-          return true;
-
-        return false;
-      });
-    }
-
-    // Apply filters
-    if (filters) {
-      if (filters.evangelistName) {
-        const name = filters.evangelistName.toLowerCase();
-        result = result.filter((record) =>
-          record.callStatuses.some((cs) =>
-            cs.evangelistName.toLowerCase().includes(name)
-          )
-        );
-      }
-
-      if (filters.callStatus) {
-        result = result.filter((record) =>
-          record.callStatuses.some(
-            (cs) => cs.callStatus.toLowerCase() === filters.callStatus!.toLowerCase()
-          )
-        );
-      }
-
-      if (filters.followUpOnly) {
-        result = result.filter((record) =>
-          record.callStatuses.some((cs) => cs.followUp)
-        );
-      }
-
-      if (filters.hasTestimonyOnly) {
-        result = result.filter((record) =>
-          record.callStatuses.some((cs) => cs.hasTestimony)
-        );
-      }
-
-      if (filters.dateFrom || filters.dateTo) {
-        result = result.filter((record) => {
-          let dateStr: string | undefined;
-          switch (filters.dateType) {
-            case 'prayer':
-              dateStr = record.appointmentInfo.prayerDate;
-              break;
-            case 'interview':
-              dateStr = record.appointmentInfo.interviewDate;
-              break;
-            case 'call':
-              dateStr = record.callStatuses[0]?.dateOfCall;
-              break;
-            case 'testimony':
-              dateStr = record.callStatuses.find((cs) => cs.hasTestimony)?.dateOfTestimony;
-              break;
-            default:
-              dateStr = record.appointmentInfo.prayerDate;
-          }
-
-          if (!dateStr) return false;
-          const date = DateHelper.parseDate(dateStr);
-          if (!date) return false;
-
-          return DateHelper.isDateInRange(date, filters.dateFrom, filters.dateTo);
-        });
-      }
-    }
-
-    return result;
-  }, [records, searchQuery, filters]);
-
   const groupedSections = useMemo((): GroupedSection[] => {
     const groups: Record<string, CallRecord[]> = {};
 
-    filteredRecords.forEach((record) => {
+    records.forEach((record) => {
       const dateStr = record.appointmentInfo.prayerDate;
 
       const date = DateHelper.parseDate(dateStr);
@@ -177,7 +136,7 @@ export function HomePage() {
         return dateB.getTime() - dateA.getTime();
       }),
     }));
-  }, [filteredRecords]);
+  }, [records]);
 
   const activeFilterCount = useMemo(() => {
     if (!filters) return 0;
@@ -191,13 +150,13 @@ export function HomePage() {
   }, [filters]);
 
   const handleRecordUpdate = () => {
-    loadRecords(currentPage);
+    loadRecords(currentPage, buildApiFilters());
   };
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && (!pagination || newPage <= pagination.totalPages)) {
       setIsLoading(true);
-      loadRecords(newPage).finally(() => setIsLoading(false));
+      loadRecords(newPage, buildApiFilters()).finally(() => setIsLoading(false));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -256,8 +215,8 @@ export function HomePage() {
           {/* Search Bar */}
           <SearchBar
             value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search name, phone, status..."
+            onChange={handleSearchChange}
+            placeholder="Search name, phone..."
           />
 
           {/* Action Bar */}
@@ -285,7 +244,7 @@ export function HomePage() {
           <div className="bg-red-100 px-4 py-3 rounded-lg mb-4">
             <p className="text-red-700">{error}</p>
             <button
-              onClick={() => loadRecords(currentPage)}
+              onClick={() => loadRecords(currentPage, buildApiFilters())}
               className="text-red-600 font-semibold mt-2 hover:underline"
             >
               Tap to retry
