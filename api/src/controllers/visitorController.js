@@ -22,6 +22,25 @@ function transformVisitor(doc) {
   };
 }
 
+// Parse date string in various formats to Date object
+function parseDateString(dateStr) {
+  if (!dateStr) return null;
+
+  // Try ISO format (yyyy-MM-dd or full ISO)
+  let date = new Date(dateStr);
+  if (!isNaN(date.getTime())) return date;
+
+  // Try MM/dd/yyyy format
+  const parts = dateStr.split('/');
+  if (parts.length === 3) {
+    const [month, day, year] = parts;
+    date = new Date(year, month - 1, day);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  return null;
+}
+
 // Build filter query from request params
 function buildFilterQuery(query) {
   const filter = {};
@@ -56,25 +75,51 @@ function buildFilterQuery(query) {
     filter['callStatusInfo.hasTestimony'] = true;
   }
 
-  // Date range filters
-  if (query.dateFrom || query.dateTo) {
-    const dateField = {
-      prayer: 'appointment.prayerDate',
-      interview: 'appointment.interviewDate',
-      call: 'callStatusInfo.dateOfCall',
-      testimony: 'callStatusInfo.dateOfTestimony',
-    }[query.dateType] || 'appointment.prayerDate';
+  return filter;
+}
 
-    if (query.dateFrom && query.dateTo) {
-      filter[dateField] = { $gte: query.dateFrom, $lte: query.dateTo };
-    } else if (query.dateFrom) {
-      filter[dateField] = { $gte: query.dateFrom };
-    } else if (query.dateTo) {
-      filter[dateField] = { $lte: query.dateTo };
+// Build date filter for aggregation pipeline
+function buildDateFilter(query) {
+  if (!query.dateFrom && !query.dateTo) return null;
+
+  const dateField = {
+    prayer: '$appointment.prayerDate',
+    interview: '$appointment.interviewDate',
+    call: { $arrayElemAt: ['$callStatusInfo.dateOfCall', 0] },
+    testimony: { $arrayElemAt: ['$callStatusInfo.dateOfTestimony', 0] },
+  }[query.dateType] || '$appointment.prayerDate';
+
+  const conditions = [];
+
+  // Parse the date field - handle both MM/dd/yyyy and yyyy-MM-dd formats
+  const parsedDate = {
+    $cond: {
+      if: { $regexMatch: { input: dateField, regex: /^\d{4}-\d{2}-\d{2}/ } },
+      then: { $dateFromString: { dateString: dateField, onError: null, onNull: null } },
+      else: {
+        $dateFromString: {
+          dateString: dateField,
+          format: '%m/%d/%Y',
+          onError: null,
+          onNull: null
+        }
+      }
     }
+  };
+
+  if (query.dateFrom) {
+    const fromDate = new Date(query.dateFrom);
+    fromDate.setHours(0, 0, 0, 0);
+    conditions.push({ $gte: [parsedDate, fromDate] });
   }
 
-  return filter;
+  if (query.dateTo) {
+    const toDate = new Date(query.dateTo);
+    toDate.setHours(23, 59, 59, 999);
+    conditions.push({ $lte: [parsedDate, toDate] });
+  }
+
+  return conditions.length === 1 ? conditions[0] : { $and: conditions };
 }
 
 // Get all visitors with pagination
@@ -85,16 +130,45 @@ export async function getVisitors(req, res) {
     const skip = (page - 1) * limit;
 
     const filter = buildFilterQuery(req.query);
-    const hasFilters = Object.keys(filter).length > 0;
+    const dateFilter = buildDateFilter(req.query);
+    const hasFilters = Object.keys(filter).length > 0 || dateFilter;
 
-    const [visitors, total] = await Promise.all([
-      Visitor.find(filter)
-        .sort({ created_at: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      hasFilters ? Visitor.countDocuments(filter) : Visitor.estimatedDocumentCount()
-    ]);
+    let visitors, total;
+
+    if (dateFilter) {
+      // Use aggregation for date filtering
+      const pipeline = [];
+
+      // Match basic filters first
+      if (Object.keys(filter).length > 0) {
+        pipeline.push({ $match: filter });
+      }
+
+      // Add date filter
+      pipeline.push({ $match: { $expr: dateFilter } });
+
+      // Get total count
+      const countPipeline = [...pipeline, { $count: 'total' }];
+      const countResult = await Visitor.aggregate(countPipeline);
+      total = countResult[0]?.total || 0;
+
+      // Add sort, skip, limit
+      pipeline.push({ $sort: { created_at: -1 } });
+      pipeline.push({ $skip: skip });
+      pipeline.push({ $limit: limit });
+
+      visitors = await Visitor.aggregate(pipeline);
+    } else {
+      // Use regular find for non-date queries
+      [visitors, total] = await Promise.all([
+        Visitor.find(filter)
+          .sort({ created_at: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        hasFilters ? Visitor.countDocuments(filter) : Visitor.estimatedDocumentCount()
+      ]);
+    }
 
     res.json({
       data: visitors.map(transformVisitor),
